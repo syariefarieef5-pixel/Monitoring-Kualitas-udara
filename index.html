@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>EnviroCore — Sensor Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#020a12;--navy:#040e1a;--glass:rgba(4,20,40,0.7);--border:rgba(0,255,220,0.12);
+  --c-temp:#ff6b35;--c-hum:#00ffd4;--c-smoke:#ffb700;--c-dust:#bf7fff;
+  --c-ok:#00ff88;--c-warn:#ffb700;--c-bad:#ff3366;
+  --text:#cde8ff;--muted:#3a5a7a;
+  --fh:'Orbitron',monospace;--fb:'Rajdhani',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--fb);min-height:100vh;overflow-x:hidden;}
+#bgc{position:fixed;inset:0;z-index:0;opacity:.5;}
+.scan{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,220,.015) 3px,rgba(0,255,220,.015) 4px);}
+.vig{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 50%,rgba(2,10,18,.9) 100%);}
+.wrap{position:relative;z-index:2;max-width:1280px;margin:0 auto;padding:20px 16px 40px;}
+
+/* Header */
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;margin-bottom:28px;
+  background:var(--glass);border:1px solid var(--border);border-radius:4px;
+  backdrop-filter:blur(12px);position:relative;overflow:hidden;flex-wrap:wrap;gap:12px;}
+header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--c-hum),transparent);
+  animation:scanH 4s linear infinite;}
+@keyframes scanH{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.logo{display:flex;align-items:center;gap:14px;}
+.logo-hex{width:46px;height:46px;background:conic-gradient(from 0deg,var(--c-hum),var(--c-temp),var(--c-dust),var(--c-hum));
+  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+  animation:huerot 12s linear infinite;}
+@keyframes huerot{to{filter:hue-rotate(360deg);}}
+.logo-name{font-family:var(--fh);font-size:18px;font-weight:900;letter-spacing:3px;
+  background:linear-gradient(90deg,var(--c-hum),#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;}
+.hdr-r{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+.pill{display:flex;align-items:center;gap:7px;padding:5px 14px;border-radius:2px;
+  border:1px solid var(--border);font-family:var(--fh);font-size:10px;letter-spacing:2px;
+  background:rgba(0,255,212,.04);}
+#dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:all .4s;}
+#dot.on{background:var(--c-ok);box-shadow:0 0 8px var(--c-ok);animation:blink 1.5s infinite;}
+#dot.err{background:var(--c-bad);}
+@keyframes blink{50%{opacity:.3;}}
+.ts{font-family:var(--fh);font-size:9px;color:var(--muted);letter-spacing:1px;}
+
+/* Alert */
+.alert{display:none;align-items:center;gap:12px;padding:12px 20px;margin-bottom:20px;
+  background:rgba(255,51,102,.1);border:1px solid rgba(255,51,102,.5);border-radius:4px;
+  font-family:var(--fh);font-size:11px;color:var(--c-bad);letter-spacing:1px;animation:fadeUp .3s ease;}
+.alert.show{display:flex;}
+.ai{font-size:18px;animation:shake .4s infinite;}
+@keyframes shake{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Cards */
+.gg{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:20px;}
+.gc{background:var(--glass);border:1px solid var(--border);border-radius:4px;
+  backdrop-filter:blur(16px);padding:24px 20px 20px;position:relative;overflow:hidden;
+  transition:transform .25s,box-shadow .3s;cursor:default;}
+.gc:hover{transform:translateY(-4px);}
+.gc::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,.03),transparent 60%);pointer-events:none;}
+.gc::before{content:'';position:absolute;top:0;left:0;width:18px;height:18px;
+  border-top:2px solid;border-left:2px solid;border-color:inherit;opacity:.6;}
+.br{position:absolute;bottom:0;right:0;width:18px;height:18px;
+  border-bottom:2px solid;border-right:2px solid;border-color:inherit;opacity:.6;}
+.gc[data-s="temp"]{border-color:rgba(255,107,53,.3);}
+.gc[data-s="hum"]{border-color:rgba(0,255,212,.3);}
+.gc[data-s="smoke"]{border-color:rgba(255,183,0,.3);}
+.gc[data-s="dust"]{border-color:rgba(191,127,255,.3);}
+.ct{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+.cl{font-family:var(--fh);font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;}
+.cs{font-size:8px;color:var(--muted);font-family:var(--fh);letter-spacing:1px;margin-top:2px;}
+.ci{width:34px;height:34px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.gc[data-s="temp"] .ci{background:rgba(255,107,53,.15);}
+.gc[data-s="hum"] .ci{background:rgba(0,255,212,.1);}
+.gc[data-s="smoke"] .ci{background:rgba(255,183,0,.12);}
+.gc[data-s="dust"] .ci{background:rgba(191,127,255,.12);}
+
+/* Gauge */
+.gw{display:flex;justify-content:center;margin:8px 0 12px;position:relative;}
+.gs{width:160px;height:90px;overflow:visible;}
+.gtrack{fill:none;stroke:rgba(255,255,255,.06);stroke-width:10;stroke-linecap:round;}
+.gfill{fill:none;stroke-width:10;stroke-linecap:round;
+  transition:stroke-dashoffset 1s cubic-bezier(.4,0,.2,1),stroke .4s;}
+.gctr{position:absolute;bottom:0;left:50%;transform:translateX(-50%);text-align:center;}
+.gv{font-family:var(--fh);font-size:26px;font-weight:900;line-height:1;display:block;transition:color .4s;}
+.gu{font-size:10px;color:var(--muted);font-family:var(--fh);}
+
+.cmm{display:flex;justify-content:space-between;font-family:var(--fh);font-size:9px;
+  color:var(--muted);letter-spacing:1px;margin-bottom:12px;}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:2px;
+  font-family:var(--fh);font-size:9px;letter-spacing:2px;font-weight:700;width:100%;
+  justify-content:center;transition:all .4s;}
+.chip-ok{background:rgba(0,255,136,.1);color:var(--c-ok);border:1px solid rgba(0,255,136,.25);}
+.chip-warn{background:rgba(255,183,0,.1);color:var(--c-warn);border:1px solid rgba(255,183,0,.3);}
+.chip-bad{background:rgba(255,51,102,.1);color:var(--c-bad);border:1px solid rgba(255,51,102,.3);}
+.gc.dr{animation:dring 1s infinite;}
+@keyframes dring{0%,100%{box-shadow:0 0 0 0 rgba(255,51,102,.4);}50%{box-shadow:0 0 0 8px rgba(255,51,102,0);}}
+
+/* Bottom */
+.bot{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+@media(max-width:720px){.bot{grid-template-columns:1fr;}}
+.panel{background:var(--glass);border:1px solid var(--border);border-radius:4px;
+  backdrop-filter:blur(12px);padding:20px;}
+.pt{font-family:var(--fh);font-size:10px;letter-spacing:3px;color:var(--muted);
+  text-transform:uppercase;display:flex;align-items:center;gap:8px;margin-bottom:16px;}
+.pt::before{content:'//';color:var(--c-hum);opacity:.5;}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+.tab{padding:4px 12px;border-radius:2px;border:1px solid var(--border);background:transparent;
+  color:var(--muted);font-family:var(--fh);font-size:9px;letter-spacing:1.5px;
+  cursor:pointer;transition:all .2s;}
+.tab:hover{color:var(--text);border-color:rgba(0,255,212,.3);}
+.tab.on{background:rgba(0,255,212,.12);color:var(--c-hum);border-color:var(--c-hum);}
+#cc{width:100%;height:160px;display:block;}
+.lt{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--fh);}
+.lt th{text-align:left;padding:7px 10px;color:var(--muted);font-size:8px;letter-spacing:2px;
+  border-bottom:1px solid var(--border);font-weight:400;}
+.lt td{padding:8px 10px;border-bottom:1px solid rgba(0,255,212,.05);font-size:10px;}
+.lt tr:hover td{background:rgba(0,255,212,.03);}
+.lt td:first-child{color:var(--muted);font-size:9px;}
+@media(max-width:500px){.gv{font-size:20px;}.gs{width:130px;height:73px;}.logo-name{font-size:14px;}}
+</style>
+</head>
+<body>
+<canvas id="bgc"></canvas>
+<div class="scan"></div><div class="vig"></div>
+<div class="wrap">
+
+<header>
+  <div class="logo">
+    <div class="logo-hex">⬡</div>
+    <div>
+      <div class="logo-name">ENVIROCORE</div>
+      <div class="logo-sub">Environmental Monitoring System v2.0</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <div class="pill"><div id="dot"></div><span id="cl">CONNECTING</span></div>
+    <div class="ts" id="ts">--:--:--</div>
+  </div>
+</header>
+
+<div class="alert" id="al"><span class="ai">⚠</span><span id="at">PERINGATAN SENSOR</span></div>
+
+<div class="gg">
+  <!-- SUHU -->
+  <div class="gc" data-s="temp" id="gc-temp">
+    <div class="br"></div>
+    <div class="ct">
+      <div><div class="cl">Suhu</div><div class="cs">TEMPERATURE</div></div>
+      <div class="ci">🌡️</div>
+    </div>
+    <div class="gw">
+      <svg class="gs" viewBox="0 0 160 90">
+        <path class="gtrack" d="M20,85 A70,70 0 0,1 140,85"/>
+        <path class="gfill" id="gf-temp" d="M20,85 A70,70 0 0,1 140,85" stroke="var(--c-temp)" stroke-dasharray="220" stroke-dashoffset="220"/>
+        <g stroke="rgba(255,255,255,.12)" stroke-width="1">
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(-180 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-135 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-90 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-45 80 85)"/>
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(0 80 85)"/>
+        </g>
+      </svg>
+      <div class="gctr"><span class="gv" id="v-temp" style="color:var(--c-temp)">--</span><span class="gu">°C</span></div>
+    </div>
+    <div class="cmm"><span>MIN <b id="mn-temp" style="color:var(--text)">--</b></span><span>MAX <b id="mx-temp" style="color:var(--text)">--</b></span></div>
+    <div class="chip chip-ok" id="chip-temp">● NORMAL</div>
+  </div>
+
+  <!-- KELEMBABAN -->
+  <div class="gc" data-s="hum" id="gc-hum">
+    <div class="br"></div>
+    <div class="ct">
+      <div><div class="cl">Kelembaban</div><div class="cs">HUMIDITY</div></div>
+      <div class="ci">💧</div>
+    </div>
+    <div class="gw">
+      <svg class="gs" viewBox="0 0 160 90">
+        <path class="gtrack" d="M20,85 A70,70 0 0,1 140,85"/>
+        <path class="gfill" id="gf-hum" d="M20,85 A70,70 0 0,1 140,85" stroke="var(--c-hum)" stroke-dasharray="220" stroke-dashoffset="220"/>
+        <g stroke="rgba(255,255,255,.12)" stroke-width="1">
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(-180 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-135 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-90 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-45 80 85)"/>
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(0 80 85)"/>
+        </g>
+      </svg>
+      <div class="gctr"><span class="gv" id="v-hum" style="color:var(--c-hum)">--</span><span class="gu">%</span></div>
+    </div>
+    <div class="cmm"><span>MIN <b id="mn-hum" style="color:var(--text)">--</b></span><span>MAX <b id="mx-hum" style="color:var(--text)">--</b></span></div>
+    <div class="chip chip-ok" id="chip-hum">● NORMAL</div>
+  </div>
+
+  <!-- ASAP -->
+  <div class="gc" data-s="smoke" id="gc-smoke">
+    <div class="br"></div>
+    <div class="ct">
+      <div><div class="cl">Asap / Gas</div><div class="cs">MQ-2 SENSOR</div></div>
+      <div class="ci">🔥</div>
+    </div>
+    <div class="gw">
+      <svg class="gs" viewBox="0 0 160 90">
+        <path class="gtrack" d="M20,85 A70,70 0 0,1 140,85"/>
+        <path class="gfill" id="gf-smoke" d="M20,85 A70,70 0 0,1 140,85" stroke="var(--c-smoke)" stroke-dasharray="220" stroke-dashoffset="220"/>
+        <g stroke="rgba(255,255,255,.12)" stroke-width="1">
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(-180 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-135 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-90 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-45 80 85)"/>
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(0 80 85)"/>
+        </g>
+      </svg>
+      <div class="gctr"><span class="gv" id="v-smoke" style="color:var(--c-smoke)">--</span><span class="gu">ppm</span></div>
+    </div>
+    <div class="cmm"><span>MIN <b id="mn-smoke" style="color:var(--text)">--</b></span><span>MAX <b id="mx-smoke" style="color:var(--text)">--</b></span></div>
+    <div class="chip chip-ok" id="chip-smoke">● AMAN</div>
+  </div>
+
+  <!-- DEBU -->
+  <div class="gc" data-s="dust" id="gc-dust">
+    <div class="br"></div>
+    <div class="ct">
+      <div><div class="cl">Debu</div><div class="cs">PM2.5 SENSOR</div></div>
+      <div class="ci">🌫️</div>
+    </div>
+    <div class="gw">
+      <svg class="gs" viewBox="0 0 160 90">
+        <path class="gtrack" d="M20,85 A70,70 0 0,1 140,85"/>
+        <path class="gfill" id="gf-dust" d="M20,85 A70,70 0 0,1 140,85" stroke="var(--c-dust)" stroke-dasharray="220" stroke-dashoffset="220"/>
+        <g stroke="rgba(255,255,255,.12)" stroke-width="1">
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(-180 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-135 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-90 80 85)"/>
+          <line x1="20" y1="85" x2="26" y2="85" transform="rotate(-45 80 85)"/>
+          <line x1="20" y1="85" x2="28" y2="85" transform="rotate(0 80 85)"/>
+        </g>
+      </svg>
+      <div class="gctr"><span class="gv" id="v-dust" style="color:var(--c-dust)">--</span><span class="gu">µg/m³</span></div>
+    </div>
+    <div class="cmm"><span>MIN <b id="mn-dust" style="color:var(--text)">--</b></span><span>MAX <b id="mx-dust" style="color:var(--text)">--</b></span></div>
+    <div class="chip chip-ok" id="chip-dust">● BAIK</div>
+  </div>
+</div>
+
+<div class="bot">
+  <div class="panel">
+    <div class="pt">Grafik Real-time</div>
+    <div class="tabs">
+      <button class="tab on" onclick="setChart('temp',this)">SUHU</button>
+      <button class="tab" onclick="setChart('hum',this)">HUMID</button>
+      <button class="tab" onclick="setChart('smoke',this)">ASAP</button>
+      <button class="tab" onclick="setChart('dust',this)">DEBU</button>
+    </div>
+    <canvas id="cc"></canvas>
+  </div>
+  <div class="panel">
+    <div class="pt">Data Log</div>
+    <div style="overflow-x:auto;max-height:240px;overflow-y:auto;">
+      <table class="lt">
+        <thead><tr><th>WAKTU</th><th>SUHU</th><th>HUMID</th><th>ASAP</th><th>DEBU</th></tr></thead>
+        <tbody id="lb"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;font-size:10px;">WAITING FOR DATA...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import{getDatabase,ref,onValue}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const cfg={apiKey:"AIzaSyCd3gzFGI0_mYvRcujb4YioZLsCEpuv16k",authDomain:"syarief-arieef.firebaseapp.com",
+  databaseURL:"https://syarief-arieef-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:"syarief-arieef",storageBucket:"syarief-arieef.firebasestorage.app",
+  messagingSenderId:"550191609238",appId:"1:550191609238:web:930f5a91f1e88f56d659b7"};
+
+const app=initializeApp(cfg),db=getDatabase(app);
+
+/* ── Particle BG ── */
+const bgc=document.getElementById('bgc'),bgx=bgc.getContext('2d');
+const pts=[];
+function resizeBG(){bgc.width=innerWidth;bgc.height=innerHeight;}
+resizeBG();window.addEventListener('resize',resizeBG);
+for(let i=0;i<60;i++)pts.push({x:Math.random()*innerWidth,y:Math.random()*innerHeight,
+  vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.5+.3,
+  c:['#00ffd4','#ff6b35','#ffb700','#bf7fff'][Math.floor(Math.random()*4)],a:Math.random()*.4+.1});
+function animBG(){
+  bgx.clearRect(0,0,bgc.width,bgc.height);
+  bgx.strokeStyle='rgba(0,255,212,0.03)';bgx.lineWidth=1;
+  for(let x=0;x<bgc.width;x+=60){bgx.beginPath();bgx.moveTo(x,0);bgx.lineTo(x,bgc.height);bgx.stroke();}
+  for(let y=0;y<bgc.height;y+=60){bgx.beginPath();bgx.moveTo(0,y);bgx.lineTo(bgc.width,y);bgx.stroke();}
+  pts.forEach(p=>{
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0||p.x>bgc.width)p.vx*=-1;if(p.y<0||p.y>bgc.height)p.vy*=-1;
+    bgx.beginPath();bgx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    bgx.fillStyle=p.c;bgx.globalAlpha=p.a;bgx.fill();bgx.globalAlpha=1;
+  });
+  for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+    const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.hypot(dx,dy);
+    if(d<80){bgx.beginPath();bgx.moveTo(pts[i].x,pts[i].y);bgx.lineTo(pts[j].x,pts[j].y);
+      bgx.strokeStyle=`rgba(0,255,212,${.06*(1-d/80)})`;bgx.lineWidth=.5;bgx.stroke();}
+  }
+  requestAnimationFrame(animBG);
+}
+animBG();
+
+/* ── Clock ── */
+setInterval(()=>{document.getElementById('ts').textContent=
+  new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});},1000);
+
+/* ── Chart ── */
+const cc=document.getElementById('cc'),cx=cc.getContext('2d');
+const HIST=20,hist={temp:[],hum:[],smoke:[],dust:[],t:[]};
+let activeC='temp';
+const cCol={temp:'#ff6b35',hum:'#00ffd4',smoke:'#ffb700',dust:'#bf7fff'};
+function resizeCC(){cc.width=cc.offsetWidth*devicePixelRatio;cc.height=cc.offsetHeight*devicePixelRatio;
+  cx.scale(devicePixelRatio,devicePixelRatio);drawChart();}
+window.addEventListener('resize',()=>setTimeout(resizeCC,50));
+setTimeout(resizeCC,150);
+
+function drawChart(){
+  const W=cc.offsetWidth,H=cc.offsetHeight;cx.clearRect(0,0,W,H);
+  const d=hist[activeC];
+  if(d.length<2){cx.fillStyle='#3a5a7a';cx.font='10px Orbitron,monospace';cx.textAlign='center';
+    cx.fillText('// WAITING FOR DATA //',W/2,H/2);return;}
+  const pad={t:14,b:24,l:36,r:8},cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const mn=Math.min(...d)*.9,mx=Math.max(...d)*1.1,rng=mx-mn||1;
+  const xi=i=>pad.l+i*(cW/(d.length-1));
+  const yi=v=>pad.t+cH-((v-mn)/rng)*cH;
+  for(let i=0;i<=4;i++){
+    const y=pad.t+(cH/4)*i;
+    cx.strokeStyle='rgba(0,255,212,0.06)';cx.lineWidth=1;cx.setLineDash([4,4]);
+    cx.beginPath();cx.moveTo(pad.l,y);cx.lineTo(W-pad.r,y);cx.stroke();cx.setLineDash([]);
+    cx.fillStyle='#3a5a7a';cx.font='8px Orbitron,monospace';cx.textAlign='right';
+    cx.fillText((mx-(rng/4)*i).toFixed(1),pad.l-4,y+3);
+  }
+  const g=cx.createLinearGradient(0,pad.t,0,H);
+  g.addColorStop(0,cCol[activeC]+'50');g.addColorStop(1,cCol[activeC]+'00');
+  cx.beginPath();cx.moveTo(xi(0),yi(d[0]));
+  for(let i=1;i<d.length;i++){const m=(xi(i-1)+xi(i))/2;cx.bezierCurveTo(m,yi(d[i-1]),m,yi(d[i]),xi(i),yi(d[i]));}
+  cx.lineTo(xi(d.length-1),pad.t+cH);cx.lineTo(xi(0),pad.t+cH);cx.closePath();
+  cx.fillStyle=g;cx.fill();
+  cx.beginPath();cx.strokeStyle=cCol[activeC];cx.lineWidth=2;cx.lineJoin='round';
+  cx.moveTo(xi(0),yi(d[0]));
+  for(let i=1;i<d.length;i++){const m=(xi(i-1)+xi(i))/2;cx.bezierCurveTo(m,yi(d[i-1]),m,yi(d[i]),xi(i),yi(d[i]));}
+  cx.stroke();
+  d.forEach((v,i)=>{cx.beginPath();cx.arc(xi(i),yi(v),3,0,Math.PI*2);
+    cx.fillStyle=i===d.length-1?'#fff':cCol[activeC];cx.fill();});
+  const step=Math.max(1,Math.floor(d.length/4));
+  cx.fillStyle='#3a5a7a';cx.font='7px Orbitron,monospace';cx.textAlign='center';
+  for(let i=0;i<d.length;i+=step)if(hist.t[i])cx.fillText(hist.t[i],xi(i),H-4);
+}
+window.setChart=function(t,btn){activeC=t;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));btn.classList.add('on');drawChart();};
+
+/* ── Gauge ── */
+function setGauge(id,pct){
+  const el=document.getElementById('gf-'+id);if(!el)return;
+  el.style.strokeDashoffset=220*(1-Math.min(1,Math.max(0,pct)));
+}
+
+/* ── Status ── */
+const thr={
+  temp:[[0,10,'DINGIN','warn'],[10,35,'NORMAL','ok'],[35,999,'PANAS!','bad']],
+  hum:[[0,30,'KERING','warn'],[30,70,'NORMAL','ok'],[70,999,'LEMBAB','warn']],
+  smoke:[[0,200,'AMAN','ok'],[200,500,'WASPADA','warn'],[500,9999,'BAHAYA!','bad']],
+  dust:[[0,35,'BAIK','ok'],[35,75,'SEDANG','warn'],[75,9999,'BURUK!','bad']]
+};
+const maxR={temp:60,hum:100,smoke:1000,dust:150};
+const mns={temp:Infinity,hum:Infinity,smoke:Infinity,dust:Infinity};
+const mxs={temp:-Infinity,hum:-Infinity,smoke:-Infinity,dust:-Infinity};
+const logs=[];
+
+function getStat(type,v){for(const[lo,hi,l,c]of thr[type])if(v>=lo&&v<hi)return{l,c};return{l:'—',c:'ok'};}
+function upd(type,val){
+  if(val==null)return false;const v=parseFloat(val);if(isNaN(v))return false;
+  mns[type]=Math.min(mns[type],v);mxs[type]=Math.max(mxs[type],v);
+  const dec=type==='smoke'?0:1;
+  document.getElementById('v-'+type).textContent=v.toFixed(dec);
+  document.getElementById('mn-'+type).textContent=mns[type].toFixed(dec);
+  document.getElementById('mx-'+type).textContent=mxs[type].toFixed(dec);
+  setGauge(type,v/maxR[type]);
+  const{l,c}=getStat(type,v);
+  const ch=document.getElementById('chip-'+type);
+  ch.textContent='● '+l;ch.className='chip chip-'+c;
+  document.getElementById('gc-'+type).classList.toggle('dr',c==='bad');
+  return c==='bad';
+}
+
+/* ── Firebase ── */
+const PATHS=['sensor','sensors','monitoring','data','/'];
+function tryPath(i){
+  if(i>=PATHS.length){document.getElementById('cl').textContent='PATH NOT FOUND';
+    document.getElementById('dot').className='err';return;}
+  onValue(ref(db,PATHS[i]),snap=>{
+    const raw=snap.val();if(!raw){tryPath(i+1);return;}
+    document.getElementById('dot').className='on';
+    document.getElementById('cl').textContent='LIVE · /'+PATHS[i];
+    let s=raw;
+    if(typeof raw==='object'&&!('temp' in raw)&&!('temperature' in raw)&&!('suhu' in raw)){
+      const ks=Object.keys(raw);s=raw[ks[ks.length-1]];}
+    const temp=s.temp??s.temperature??s.suhu??s.Temp??null;
+    const hum=s.hum??s.humidity??s.kelembaban??s.Hum??null;
+    const smoke=s.smoke??s.mq2??s.asap??s.Smoke??null;
+    const dust=s.dust??s.pm25??s.debu??s.Dust??null;
+    const alerts=[];
+    if(upd('temp',temp))alerts.push('SUHU TINGGI');
+    if(upd('hum',hum))alerts.push('KELEMBABAN EKSTREM');
+    if(upd('smoke',smoke))alerts.push('ASAP TERDETEKSI');
+    if(upd('dust',dust))alerts.push('DEBU BERBAHAYA');
+    const al=document.getElementById('al');
+    if(alerts.length){al.classList.add('show');document.getElementById('at').textContent='⚠ '+alerts.join(' | ');}
+    else al.classList.remove('show');
+    const tl=new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+    ['temp','hum','smoke','dust'].forEach(k=>{
+      const v=k==='temp'?temp:k==='hum'?hum:k==='smoke'?smoke:dust;
+      if(v!=null){hist[k].push(parseFloat(v));if(hist[k].length>HIST)hist[k].shift();}
+    });
+    hist.t.push(tl);if(hist.t.length>HIST)hist.t.shift();
+    drawChart();
+    logs.unshift({t:new Date().toLocaleString('id-ID'),temp,hum,smoke,dust});
+    if(logs.length>50)logs.pop();
+    const fmt=v=>v==null?'--':parseFloat(v).toFixed(1);
+    document.getElementById('lb').innerHTML=logs.slice(0,15).map(r=>
+      `<tr><td>${r.t}</td><td>${fmt(r.temp)}</td><td>${fmt(r.hum)}</td>
+       <td>${r.smoke==null?'--':parseFloat(r.smoke).toFixed(0)}</td><td>${fmt(r.dust)}</td></tr>`).join('');
+  },(e)=>{console.warn(PATHS[i],e.message);tryPath(i+1);});
+}
+tryPath(0);
+</script>
+</body>
+</html>
